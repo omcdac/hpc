@@ -1,0 +1,155 @@
+
+source /home/apps/spack/share/spack/setup-env.sh
+spack load tcl@8.6.11 /o6j3cb3
+spack load fftw@3.3.9 /3dpuaqn
+spack load cuda /rnz3qca
+module load compiler/intel/2020.4.304
+module load cuda/11.2
+
+
+export TCL=/home/apps/spack/opt/spack/linux-centos7-cascadelake/oneapi-2021.4.0/tcl-8.6.11-o6j3cb3lrwhmmqzyotcjm6jmk2fqc7w5
+export FFTW=/home/apps/spack/opt/spack/linux-centos7-cascadelake/oneapi-2021.3.0/fftw-3.3.9-3dpuaqna6aij266dt4xievfk6yjye75d
+export MPI=/home/opt_ohpc_pub/oneapi/mpi/2021.2.0
+#export MPI=/home/apps/spack/opt/spack/linux-centos7-cascadelake/oneapi-2021.3.0/intel-oneapi-mpi-2021.3.0-aiqn7jc7dd5aifrwny5neta2jgpjabxj/mpi/2021.3.0
+#export CUDA=/home/apps/spack/opt/spack/linux-centos7-cascadelake/oneapi-2021.4.0/cuda-11.5.0-rnz3qcarvr6puefqpgzy5g57bzqyrj62
+export MYCUDA=/opt/ohpc/pub/cuda/cuda-11.2
+
+
+export PATH=/home/vidhyas/plumed_install/bin:$PATH
+export INCLUDE_PATH=/home/vidhyas/plumed_install/include:$INCLUDE_PATH
+export LD_LIBRARY_PATH=/home/vidhyas/plumed_install/lib:$LD_LIBRARY_PATH
+export PKG_CONFIG_PATH=/home/vidhyas/plumed_install/lib/pkgconfig:$PKG_CONFIG_PATH
+export PLUMED_KERNEL=/home/vidhyas/plumed_install/lib/libplumedKernel.so
+export PLUMD=/home/vidhyas/plumed_install
+
+
+export PREFIX=/home/vidhyas/NAMD-2.14_Install
+
+cd /home/vidhyas
+
+tar -xvf NAMD_2.14_Source.tar.gz
+cd NAMD_2.14_Source
+
+tar -xvf charm-6.10.2.tar
+
+export MPICXX=mpiicpc
+export MPICC=mpiicc
+
+#NAMD charm
+#untar charm inside namd dir
+
+cd charm-6.10.2
+MPICXX=mpiicpc -std=c++11 MPICC=mpiicc -std=c++11 ./build charm++ mpi-linux-x86_64 smp mpicxx ifort --with-production --no-shared -O2 -axCORE-AVX2 -DCMK_OPTIMIZE=1 
+
+cd mpi-linux-x86_64-ifort-smp-mpicxx/tests/charm++/megatest
+
+make pgm|tee charmm6.10_testmake.log
+mpirun -n 24 ./pgm
+if [ $(echo $?) == "0" ]; then
+	echo "CHARM++ installed properly"
+else
+	echo "CHARM++:some error occured "
+	read namd_err
+fi
+
+
+cd -
+
+ln -s mpi-linux-x86_64-ifort-smp-mpicxx multicore-linux64-ifort-icc
+
+#NAMD
+cd /home/vidhyas/NAMD_2.14_Source
+
+cd arch
+
+cp Linux-x86_64-icc.arch Linux-x86_64-MPI-icc.arch
+
+#Edit file Linux-x86_64-MPI-icc.arch
+NAMD_ARCH = Linux-x86_64
+CHARMARCH = multicore-linux64-ifort-icc
+
+FLOATOPTS = -O2 -m64 -g -axCORE-AVX2 -fma -ip -qopenmp
+
+#CXX = icpc  -std=c++11 
+CXX = icpc 
+CXXOPTS = -static-intel -O2 $(FLOATOPTS)
+CXXNOALIASOPTS = -O2 -fno-alias $(FLOATOPTS)
+CXXCOLVAROPTS = -O2 -ip
+
+CC = icc
+COPTS = -static-intel -O2 $(FLOATOPTS)
+
+
+#Edit Linux-x86_64.fftw3
+FFTDIR=/home/apps/spack/opt/spack/linux-centos7-cascadelake/oneapi-2021.3.0/fftw-3.3.9-3dpuaqna6aij266dt4xievfk6yjye75d
+
+#Edit Linux-x86_64.tcl
+TCLDIR=/home/apps/spack/opt/spack/linux-centos7-cascadelake/oneapi-2021.4.0/tcl-8.6.11-o6j3cb3lrwhmmqzyotcjm6jmk2fqc7w5
+TCLLIB=-L$(TCLDIR)/lib -ltcl8.6 -ldl -lpthread
+
+#Edit Linux-x86_64.cuda
+CUDADIR=/home/apps/spack/opt/spack/linux-centos7-cascadelake/oneapi-2021.4.0/cuda-11.5.0-rnz3qcarvr6puefqpgzy5g57bzqyrj62
+CUDADLINKOPTS=-gencode arch=compute_70,code=compute_70
+CUDAGENCODE=-gencode arch=compute_70,code=compute_70
+
+
+
+cd ..
+
+./config Linux-x86_64-MPI-icc.arch --charm-base /home/vidhyas/NAMD_2.14_Source/charm-6.10.2 --charm-arch   multicore-linux64-ifort-icc   --cxx mpiicpc --cc mpiicc --tcl-prefix $TCL --with-fftw3 --fftw-prefix $FFTW  --with-cuda  --cuda-prefix $CUDA 
+
+#### without CUDA #############
+./config Linux-x86_64-MPI-icc.arch --charm-base /home/vidhyas/NAMD_2.14_Source/charm-6.10.2 --charm-arch   multicore-linux64-ifort-icc   --cxx mpiicpc --cc mpiicc --tcl-prefix $TCL --with-fftw3 --fftw-prefix $FFTW 
+
+
+./config Linux-x86_64-MPI-icc --charm-arch multicore-linux64-ifort-icc /home/vidhyas/plumed_install/bin/plumed patch -p -e namd-2.14
+
+
+$PLUMD/bin/plumed patch -p -e namd-2.14
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+[vidhyas@login03 NAMD_2.14_Source]$ $PLUMD/bin/plumed patch -p -e namd-2.14
+PLUMED patching tool
+
+MD engine: namd-2.14
+PLUMED location: /home/vidhyas/plumed_install/lib/plumed
+diff file: /home/vidhyas/plumed_install/lib/plumed/patches/namd-2.14.diff
+sourcing config file: /home/vidhyas/plumed_install/lib/plumed/patches/namd-2.14.config
+Linking Plumed.h, Plumed.inc, and Plumed.cmake (shared mode)
+Patching with stored diff
+patching file ./Makefile
+patching file ./src/ComputeMgr.C
+patching file ./src/SimParameters.C
+patching file ./src/SimParameters.h
+[vidhyas@login03 NAMD_2.14_Source]$
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+cd Linux-x86_64-MPI-icc.arch
+#vi Make.config
+#CXX = mpiicpc -std=c++11
+
+
+
+
+make VERBOSE=1 -j 40 | tee NAMD.log
+
+
+#error ==> "simd assert" means vectorize or die.
+#vi src/ComputeNonbondedBase2.h
+#remove assert
+
+
+make VERBOSE=1 -j 40 | tee NAMD.log
+
+################ Done ##################
+
+mkdir -p $PREFIX/bin 
+mkdir -p $PREFIX/lib
+cp charmrun flip* namd2 psfgen sortreplicas $PREFIX/bin
+cp lib* $PREFIX/lib
+cd $PREFIX/lib
+ln -s libcudart.so.10.0 libcudart.so
+ln -s libcufft.so.10.0 libcufft.so
